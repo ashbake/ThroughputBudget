@@ -1,3 +1,5 @@
+# README Overview
+
 This repo contains all files and code to compute the HISPEC throughput curves
 
 The inputs/ folder contains all the text files with info on coatings, transmissions, etc for the computation
