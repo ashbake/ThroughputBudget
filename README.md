@@ -1,4 +1,4 @@
-# README Overview
+# Overview
 
 This repo contains all files and code to compute the HISPEC throughput curves
 
