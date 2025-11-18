@@ -31,6 +31,7 @@ if __name__=='__main__':
 	configs['bspec'] = ['TELESCOPE', 'AO', 'FEI COMMON', 'FEI BLUE', 'COUPLING NGS', 'FIBER TRANSMISSION BLUE', 'BSPEC']
 	configs['rspec'] = ['TELESCOPE', 'AO', 'FEI COMMON', 'FEI RED', 'COUPLING NGS', 'FIBER TRANSMISSION RED', 'RSPEC']
 	configs['ATC']   = ['TELESCOPE', 'AO', 'FEI COMMON', 'FEI ATC']
+
 	# CAL paths -
 	configs['FEI_Rinject'] = ['FEI COMMON', 'FEI RED', 'COUPLING PERFECT', 'FIBER TRANSMISSION RED', 'RSPEC']
 	configs['FEI_Binject'] = ['FEI COMMON', 'FEI BLUE', 'COUPLING PERFECT', 'FIBER TRANSMISSION BLUE', 'BSPEC']
