@@ -49,6 +49,28 @@ if __name__=='__main__':
 	# can also plot the components of a subsection like this:
 	#ct.plotSubsectionComponents('FEI COMMON')
 
+    # calc throughputs WITHOUT THE BLAZE - need to go to excel sheet and put a 0 under include column for blaze file
+    save_path = './outputs/foraidan/'
+    gbt = CalcThroughput(x, '../HISPEC_allsubs.xlsx',data_path='./inputs/')
+    
+    # define sections of instrument to include
+    atc_keys = ['TELESCOPE', 'AO', 'FEI COMMON', 'FEI BLUE', 
+                'COUPLING NGS', 'FIBER TRANSMISSION BLUE', 'BSPEC']
+    label    = 'BSPEC_endTOend_NGS'
+    throughput = gbt.run(atc_keys,save_path=save_path,label=label)
+    gbt.plotTotalThroughput(label=label,save_path=save_path)
+    gbt.plotSubsections(keys=atc_keys,label=label + ' Subsections',save_path=save_path)
+    gbt.plotSubsectionComponents('BSPEC',save_path=save_path)
+
+    # calc total hispec  rspec
+    atc_keys = ['TELESCOPE', 'AO', 'FEI COMMON', 'FEI RED', 
+                'COUPLING NGS', 'FIBER TRANSMISSION RED', 'RSPEC']
+    label    = 'RSPEC_endTOend_NGS'
+    throughput = gbt.run(atc_keys,save_path=save_path,label=label)
+    gbt.plotTotalThroughput(label=label,save_path=save_path)
+    gbt.plotSubsections(keys=atc_keys,label=label + ' Subsections',save_path=save_path)
+    gbt.plotSubsectionComponents('RSPEC',save_path=save_path)
+
 
 	
 

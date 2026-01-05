@@ -128,6 +128,7 @@ class CalcThroughput():
             # if include (first column) is 1, include it
             if include == 1:
                 # process input based on entry type and mulitply all together
+                print(key)
                 transmission[key] *= self._setInput(wave,types[i], values[i], 
                                                    filenames[i],data_path)
 
@@ -261,7 +262,7 @@ class CalcThroughput():
 
             plt.savefig(save_path + '/transmission_total_%s.png'%label,dpi=500)
 
-    def plotSubsectionComponents(self,key_name):
+    def plotSubsectionComponents(self,key_name,save_path=None):
         """
         plot subsystem components labeled by key
         
@@ -292,7 +293,14 @@ class CalcThroughput():
         
         ax.plot(self.wave,total,'k',lw=2)
         plt.legend(fontsize=8)
+        plt.title(key_name)
         plt.grid()
+
+        if save_path != None:
+            if not os.path.exists(save_path):
+                os.makedirs(save_path)
+
+            plt.savefig(save_path + '/subsection_components_%s.png'%key_name,dpi=500)
 
     def plotSubsections(self,keys,ax=None,save_path=None,label='test'):
         """ plot transmission for each subsystem
@@ -321,11 +329,11 @@ class CalcThroughput():
         ax.legend(fontsize=7)
         ax.grid()
 
-        if save_path != None:   
+        if save_path != None:
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
 
-            np.savetxt(save_path + './transmission_%s.png'%label, np.vstack((self.wave,self.total_throughput)).T,delimiter=',',header='wavelength (nm),transmission (I/F) ')
+            plt.savefig(save_path + '/transmission_components_%s.png'%label,dpi=500)
 
         return ax
 
@@ -352,15 +360,21 @@ def calc_strehl(wfe,wavelength):
 
 
 if __name__=='__main__':
+    # define wavelength array
+    x = np.arange(900,2600,0.1)
     # example save strehl
-	wfe = 120 # nm
-	strehl = calc_strehl(wfe,x)
-	np.savetxt('inputs/fiber/strehl_howfe_%snm.csv'%wfe, np.vstack((x,strehl)).T,delimiter=',',header='wavelength(nm), strehl')
+    wfe = 120 # nm
 
-	# example calc throughput usage
-	gbt = CalcThroughput(x, '../HISPEC_allsubs.xlsx',data_path='./inputs/')
-	atc_keys = ['TELESCOPE', 'AO', 'FEI COMMON', 'FEI ATC']
-	throughput = gbt.run(atc_keys)
-	gbt.plotTotalThroughput()
-	gbt.plotSubsections(keys=atc_keys)
-	gbt.plotSubsectionComponents('AO')
+    strehl = calc_strehl(wfe,x)
+    np.savetxt('inputs/fiber/strehl_howfe_%snm.csv'%wfe, np.vstack((x,strehl)).T,delimiter=',',header='wavelength(nm), strehl')
+
+    # example calc throughput usage with atc throughput
+    gbt = CalcThroughput(x, '../HISPEC_allsubs.xlsx',data_path='./inputs/')
+    atc_keys = ['TELESCOPE', 'AO', 'FEI COMMON', 'FEI ATC']
+    label    = 'ATC Throughput'
+    throughput = gbt.run(atc_keys)
+    gbt.plotTotalThroughput(label=label)
+    gbt.plotSubsections(keys=atc_keys,label=label + ' Subsections')
+    gbt.plotSubsectionComponents('AO')
+
+
