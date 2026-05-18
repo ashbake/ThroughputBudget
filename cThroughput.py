@@ -41,7 +41,7 @@ class CalcThroughput():
     Uses Excel throughput tracker for loading throughput for hispec and modhis options
 
     """
-    def __init__(self,wave,excel_file, data_path='./data/throughput/hispec_subsystems/'):  
+    def __init__(self,wave,excel_file, data_path='./data/throughput/hispec_subsystems/', include_ind=1):  
         """    
         inputs
         ------
@@ -51,7 +51,11 @@ class CalcThroughput():
             name of the excel file. Assumes location is data_path
         data_path - str
             path to excel_file and the throughput coatings data that are pointed to in the excel_file
-
+        include_ind - int
+            value in the 'Include?' column of the excel file that indicates to include the row in the transmission calculation. 
+            Will always include '1' , never include '0', and will also include include_ind values (for selecting dichroic options)
+            TODO: make include_ind a list to allow for more options in the future   
+            
         outputs
         -------
         s - array
@@ -64,7 +68,7 @@ class CalcThroughput():
         self.data_path = data_path
         
         # load dictionary of transmission data for each subsection then combine
-        self.transmission_dic = self._loadTransmissionData(wave,excel_file,data_path)
+        self.transmission_dic = self._loadTransmissionData(wave,excel_file,data_path,include_ind)
         
 		#you can then call runThroughputCalc with the set of keys to compute throughput for
         
@@ -101,7 +105,7 @@ class CalcThroughput():
 
         return self.total_throughput
     
-    def _loadTransmissionData(self,wave,excel_file,data_path):
+    def _loadTransmissionData(self,wave,excel_file,data_path, include_ind=1):
         """ Load transmission data into dictionary
 
         inputs
@@ -110,6 +114,10 @@ class CalcThroughput():
             wavelength grid
         excel_file : str
             path to and name of excel file to load
+        include_ind: int
+            value in the 'Include?' column of the excel file that indicates to include the row in the transmission calculation. 
+            Will always include '1' , never include '0', and will also include include_ind values (for selecting dichroic options)
+            TODO: make include_ind a list to allow for more options in the future
 
         outputs
         -------
@@ -126,7 +134,7 @@ class CalcThroughput():
                 key = elements[i]
                 transmission[key] = np.ones_like(wave)
             # if include (first column) is 1, include it
-            if include == 1:
+            if (include == 1) or (include == include_ind):
                 # process input based on entry type and mulitply all together
                 print(key)
                 transmission[key] *= self._setInput(wave,types[i], values[i], 
