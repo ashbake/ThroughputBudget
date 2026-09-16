@@ -44,7 +44,7 @@ class CalcThroughput():
     Uses Excel throughput tracker for loading throughput for hispec and modhis options
 
     """
-    def __init__(self,wave,excel_file, data_path='./data/throughput/hispec_subsystems/', include_ind=1):  
+    def __init__(self, wave, excel_file, data_path='./data/throughput/hispec_subsystems/'):  
         """    
         inputs
         ------
@@ -54,10 +54,6 @@ class CalcThroughput():
             name of the excel file. Assumes location is data_path
         data_path - str
             path to excel_file and the throughput coatings data that are pointed to in the excel_file
-        include_ind - int
-            value in the 'Include?' column of the excel file that indicates to include the row in the transmission calculation. 
-            Will always include '1' , never include '0', and will also include include_ind values (for selecting dichroic options)
-            TODO: make include_ind a list to allow for more options in the future   
             
         outputs
         -------
@@ -72,12 +68,8 @@ class CalcThroughput():
         
         # load dictionary of transmission data for each subsection then combine
         self.includes, self.types, self.values, self.filenames, self.emissivities, self.temperatures, self.elements = self._loadThroughputFile(excel_file)
-
-        self.transmission_dic = self._loadTransmissionData(include_ind)
         
-		#you can then call runThroughputCalc with the set of keys to compute throughput for
-        
-    def run(self,keys,save_path=None,label='test'):
+    def run(self, keys, save_path=None, label='test', include_ind=1, R=100000, npix=3):
         """Combine various sections into the throughputs we want 
         that are already loaded in __init__ into transmission_dic
         
@@ -91,6 +83,10 @@ class CalcThroughput():
 			path to where to save data, if none will not save data
         label - str (default: test)
 			label to add to the saved data name
+        include_ind - int
+            value in the 'Include?' column of the excel file that indicates to include the row in the transmission calculation. 
+            Will always include '1' , never include '0', and will also include include_ind values (for selecting dichroic options)
+            TODO: make include_ind a list to allow for more options in the future   
 
         output
         ------
@@ -98,17 +94,29 @@ class CalcThroughput():
 	        final throughput array sampled on wave grid. 
             Also stored as self.total_throughput
         """
-        self.total_throughput = self._combineTransmission(self.wave,
+        self.save_path = save_path
+        self.label = label
+
+        # loads every section for include_ind and 1 then parses (TODO combine this into one to mimic calcBackground)
+        self.transmission_dic = self._loadTransmissionData(include_ind) 
+        self.total_throughput = self._combineTransmission(self.wave, 
                                                            self.transmission_dic, 
                                                            keys)
-        # save
+        # load background - only loads specified sections in 'keys'
+        self.path_background, self.path_background_dic = self._calcBackground(keys, 
+                                                                              include_ind, 
+                                                                              R=R, npix=npix)
+        # save throughput and path background as files in save_path
         if save_path != None:   
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
-
             np.savetxt(save_path + './transmission_total_%s.txt'%label, np.vstack((self.wave,self.total_throughput)).T,delimiter=',',header='wavelength (nm),transmission (I/F) ')
+            if type(self.path_background.value) != np.float64: 
+                np.savetxt(save_path + './instbkg_%s.txt'%label, np.vstack((self.wave, self.path_background.value)).T,delimiter=',',header='wavelength (nm),inst_bkg (ph/s) ')
+            else:
+                np.savetxt(save_path + './instbkg_%s.txt'%label, [self.path_background.value], delimiter=',',header=f'include_ind={include_ind}\n {keys}\ninst_bkg (ph/s)')
+                 
 
-        return self.total_throughput
     
     def _loadTransmissionData(self, include_ind=1):
         """ Load transmission data into dictionary
@@ -136,11 +144,16 @@ class CalcThroughput():
 
         return transmission
 
-    def calcBackground(self, keys_to_include, include_ind=1, R=100000, npix=3):
-        """ Compute emissivity
+    def _calcBackground(self, keys_to_include, include_ind=1, R=100000, npix=3):
+        """ Compute emissivity. See excel sheet for which surfaces have emissivity data.
+        Should double check all files are defined out to 2.5um. 
+        If FEI ATC is in the path, integrates instead of using R & npix. Otherwise does a per reduced pixel calculation.
 
         inputs
         ------
+        keys_to_include: list
+            list of subsections heading keys to include e.g. ['TELESCOPE', 'AO', 'FEI COMMON', 'FEI ATC']
+
         include_ind: int
             which to include in addition to 1 (for selecting dichroics)
 
@@ -150,10 +163,13 @@ class CalcThroughput():
         npix: float
             pixel sampling of spectrograph per resolution element (default 100,000)
 
+        save_path: str
+            path to save wave, path_background to file prefixed 'inst_bkg'
+
         outputs
         -------
         path_background - array or float
-            if FEI ATC is in keys_to_include, it will 
+            if FEI ATC is in keys_to_include, it will be float otherwise will be an array sampled on self.wave assuming R and npix for spectral dispersion and SMF coupling
 
         path_background_flux - dictionary
             has the independent emission of each subsystem
@@ -161,15 +177,14 @@ class CalcThroughput():
         references:
         https://caltech.sharepoint.com/:p:/r/sites/coo/hispec/_layouts/15/Doc.aspx?sourcedoc=%7BDB5077D7-912D-4B5F-83DC-2A38FBC6150D%7D&file=Thermal%20Background%20Analytical%20Calculations.pptx&action=edit&mobileredirect=true
         """ 
-        #keys_to_include = ['TELESCOPE', 'AO', 'FEI COMMON', 'FEI ATC']
         if 'FEI ATC' in keys_to_include: # if FEI ATC is included, need to assume ATC metrics
-            Aomega = 28.3 * u.radian**2 * u.micron ** 2 # Area times omega assuming f/6 cold snout 1.132 π2 p2 / (4F#2)
+            Aomega = 28.3 * u.radian**2 * u.micron ** 2 # Area times omega assuming f/6 cold snout, 1.132 π2 p2 / (4F#2)
         else:
             # These are only valid for the spectrograph
             dlambda  = u.nm * self.wave / R / npix # pixel width in nanometers considering pixel sampling
             #fwhm = ((self.wave * u.nm / telescope_diameter) * u.radian).to(u.arcsec)
             #Aomega   = 1.13 * 2 * fwhm **2 * np.pi * (telescope_diameter/2)**2 # this reduces 1.775 * lambda^2
-            Aomega = 1.775 * u.radian**2 * (u.nm * self.wave) ** 2 # area of telescope times solid angle of fiber on sky, approx what couples into the SMF
+            Aomega   = 1.775 * u.radian**2 * (u.nm * self.wave) ** 2 # area of telescope times solid angle of fiber on sky, approx what couples into the SMF
 
         path_background_flux = {}                        # for storing snapshots of each subsystem where only considers that subsystem
         path_background_total = np.zeros_like(self.wave) # for combining full path to include full throughput of path
@@ -178,9 +193,9 @@ class CalcThroughput():
             # start a dictionary entry for new section
             if self.types[i] == 'Note':
                 key = self.elements[i]
-                path_background_flux[key] = np.zeros_like(self.wave) # refresh this for each subsystem
+                if key in keys_to_include: path_background_flux[key] = np.zeros_like(self.wave) # refresh this for each subsystem
             if key in keys_to_include:
-                print(f'Computer Emissivity - including {key} components')
+                print(f'Compute Emissivity - including {key} components')
                 # if include (first column) is 1, include it
                 if (include == 1) or (include==include_ind):
                     # Load the transmission for this surface
@@ -202,11 +217,11 @@ class CalcThroughput():
                     path_background_total     = path_background_total * transmission_surface + flux_out_surface 
 
         if 'FEI ATC' in keys_to_include:
-            path_background = np.trapezoid(path_background_total, x=u.nm * self.wave).decompose()
+            self.path_background = np.trapezoid(path_background_total, x=u.nm * self.wave).decompose()
         else:
-            path_background = (path_background_total * dlambda).decompose()
+            self.path_background = (path_background_total * dlambda).decompose()
 
-        return path_background, path_background_flux
+        return self.path_background, path_background_flux
 
     def _get_bb_radiation(self, temperature, Aomega):
         """
@@ -226,7 +241,7 @@ class CalcThroughput():
 
         return bb_flux
 
-    def _combineTransmission(self, x,transmission_dic, keys):
+    def _combineTransmission(self, x, transmission_dic, keys):
         """for key in keys, multiply all transmission entries together."""
         t_all = np.ones_like(x)
         for key in keys:
@@ -320,7 +335,7 @@ class CalcThroughput():
                 f_interp =  interpolate.interp1d(f[:,0], f[:,1],bounds_error=False,fill_value='extrapolate')
                 return f_interp(wave) ** thickness_ratio
 
-    def plotTotalThroughput(self,label='test',ax=None,save_path=None):
+    def plotTotalThroughput(self,ax=None):
         """Plot self.total_throughput
         inputs
         -----
@@ -348,15 +363,40 @@ class CalcThroughput():
         ax.set_ylabel('Throughput',fontsize=12)
         ax.grid()
         
-        plt.title(label)
+        plt.title(self.label)
+        if self.save_path != None: plt.savefig(self.save_path + '/transmission_total_%s.png'%self.label,dpi=500)
+
+    def plotBackground(self,ax=None):
+        """Plot self.total_throughput
+        inputs
+        -----
+        label - str
+			name to label the plot
+        save_path - str (default None)
+			path to save the plot image and the total throughput arrays 
+        """
+        if len(self.path_background)==1: print('Path Background is a single number (ATC probably)'); return
+
+        if ax==None:    fig, ax = plt.subplots(1, 1, figsize=(9,4))
+        ax.fill_between(yJ,y1=0,y2=1,facecolor='blue',alpha=0.1,zorder=-100)
+        ax.fill_between(HK,y1=0,y2=1,facecolor='red',alpha=0.1)
+
+        #ax.text(385.1,0.041,'Requirement',fontsize=9)
+
+        ax.plot(self.wave, self.path_background,'k',label=self.label)
+        ax.legend()
+        ax.set_ylim(0,np.max(self.path_background.value) * 1.5)
+
+        # grids!
+        ax.yaxis.grid(True, which='both',alpha=0.5)
+
+        ax.set_xlabel('Wavelength (nm)',fontsize=12)
+        ax.set_ylabel('Instrument Background (ph/s)',fontsize=12)
         
-        if save_path != None:
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
+        plt.title(self.label)
+        if self.save_path != None: plt.savefig(self.save_path + '/instbkg_%s.png'%self.label,dpi=500)
 
-            plt.savefig(save_path + '/transmission_total_%s.png'%label,dpi=500)
-
-    def plotSubsectionComponents(self,key_name,save_path=None):
+    def plotSubsectionComponents(self,key_name):
         """
         plot subsystem components labeled by key
         
@@ -389,13 +429,9 @@ class CalcThroughput():
         plt.title(key_name)
         plt.grid()
 
-        if save_path != None:
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
+        if self.save_path != None: plt.savefig(self.save_path + '/subsection_components_%s.png'%key_name,dpi=500)
 
-            plt.savefig(save_path + '/subsection_components_%s.png'%key_name,dpi=500)
-
-    def plotSubsections(self,keys,ax=None,save_path=None,label='test'):
+    def plotSubsections(self,keys,ax=None,):
         """ plot transmission for each subsystem
         
         inputs
@@ -411,22 +447,19 @@ class CalcThroughput():
             if np.any(self.transmission_dic[k]!=1): 
                 ax.plot(self.wave,self.transmission_dic[k],label=k) 
 
+        ax.plot(self.wave,self.total_throughput,'k',lw=2, label='Total Throughput')
         ax.fill_between(yJ,y1=0,y2=1,facecolor='blue',alpha=0.3)
         ax.fill_between(HK,y1=0,y2=1,facecolor='red',alpha=0.3)
         ax.set_ylim(0,1.1)
 
         ax.set_xlabel('Wavelength (nm)',fontsize=12)
         ax.set_ylabel('Throughput',fontsize=12)
-        plt.title(label)
+        plt.title(self.label)
         
         ax.legend(fontsize=7)
         ax.grid()
 
-        if save_path != None:
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
-
-            plt.savefig(save_path + '/transmission_components_%s.png'%label,dpi=500)
+        if self.save_path != None: plt.savefig(self.save_path + '/transmission_components_%s.png'%self.label,dpi=500)
 
         return ax
 
@@ -461,13 +494,16 @@ if __name__=='__main__':
     strehl = calc_strehl(wfe,x)
     np.savetxt('inputs/fiber/strehl_howfe_%snm.csv'%wfe, np.vstack((x,strehl)).T,delimiter=',',header='wavelength(nm), strehl')
 
-    # example calc throughput usage with atc throughput
+    # ATC Throughput Example
     gbt = CalcThroughput(x, './HISPEC_allsubs.xlsx',data_path='./inputs/')
     atc_keys = ['TELESCOPE', 'AO', 'FEI COMMON', 'FEI ATC']
     label    = 'ATC Throughput'
-    throughput = gbt.run(atc_keys)
+    gbt.run(atc_keys)
     gbt.plotTotalThroughput(label=label)
     gbt.plotSubsections(keys=atc_keys,label=label + ' Subsections')
     gbt.plotSubsectionComponents('AO')
+
+    # BSPEC Throughput Example (minus coupling)
+    atc_keys = ['TELESCOPE', 'AO', 'FEI COMMON', 'FEI ATC']
 
 
